@@ -66,6 +66,24 @@ export class DrinksService {
   async deleteMenuItem(id: string): Promise<void> {
     const item = await this.menuRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Menu item not found');
+
+    // Any historical drink_requests block hard-delete (FK constraint).
+    // If any exist, soft-delete: set isActive=false so it's hidden from menus
+    // but historical analytics still resolve the drink name.
+    const requestCount = await this.menuRepo.manager.query(
+      'SELECT COUNT(*) as count FROM drink_requests WHERE drink_item_id = $1',
+      [id],
+    );
+    const hasHistory = parseInt(requestCount[0].count, 10) > 0;
+
+    if (hasHistory) {
+      await this.menuRepo.update(id, { isActive: false });
+      return;
+    }
+
+    // No history — safe to hard delete.
+    // location_drinks rows are pure availability flags; we remove them first.
+    await this.locationDrinkRepo.delete({ drinkItemId: id });
     await this.menuRepo.delete(id);
   }
 
