@@ -11,6 +11,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { LocationsModule } from './locations/locations.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DrinkRequestsModule } from './drink-requests/drink-requests.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { DrinkRequestsModule } from './drink-requests/drink-requests.module';
     LocationsModule,        // Multi-location + staff assignments
     NotificationsModule,    // Expo push token registration + delivery
     DrinkRequestsModule,    // Member drink requests + staff acceptance
+    AdminModule,            // Admin dashboard stats
   ],
 })
 export class AppModule {}
