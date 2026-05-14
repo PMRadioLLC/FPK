@@ -55,6 +55,16 @@ export class DrinksController {
     return this.drinksService.deleteMenuItem(id);
   }
 
+  /** POST /drinks/menu/:id/photo — Admin: upload a photo for a menu item */
+  @Post('menu/:id/photo')
+  @AuthRoles(UserRole.OWNER, UserRole.MANAGER)
+  uploadPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('photoBase64') photoBase64: string,
+  ) {
+    return this.drinksService.uploadPhotoFromBase64(id, photoBase64);
+  }
+
   // ==================== LOCATION AVAILABILITY ====================
 
   /** GET /drinks/location/:locationId — Get available drinks at a location */

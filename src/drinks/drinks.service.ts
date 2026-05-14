@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DrinkMenuItem, DrinkCategory } from './drink-menu-item.entity';
 import { LocationDrink } from './location-drink.entity';
 import { DrinkLog } from './drink-log.entity';
 import { DrinkLimitConfig } from './drink-limit-config.entity';
+import { FirebaseService } from '../auth/firebase.service';
 
 @Injectable()
 export class DrinksService {
@@ -13,7 +14,28 @@ export class DrinksService {
     @InjectRepository(LocationDrink) private locationDrinkRepo: Repository<LocationDrink>,
     @InjectRepository(DrinkLog) private drinkLogRepo: Repository<DrinkLog>,
     @InjectRepository(DrinkLimitConfig) private limitRepo: Repository<DrinkLimitConfig>,
+    private firebaseService: FirebaseService,
   ) {}
+
+  /**
+   * Upload a drink photo from base64 — backend uploads to Firebase Storage
+   * to avoid RN + Firebase-JS-SDK Blob compatibility issues.
+   */
+  async uploadPhotoFromBase64(id: string, base64: string): Promise<DrinkMenuItem> {
+    if (!base64 || base64.length < 20) {
+      throw new BadRequestException('Missing or invalid photo');
+    }
+    const item = await this.menuRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Menu item not found');
+
+    const clean = base64.replace(/^data:image\/\w+;base64,/, '');
+    const bytes = Buffer.from(clean, 'base64');
+    const path = `drinks/${id}_${Date.now()}.jpg`;
+    const photoUrl = await this.firebaseService.uploadFile(path, bytes, 'image/jpeg');
+
+    await this.menuRepo.update(id, { photoUrl });
+    return this.menuRepo.findOne({ where: { id } }) as Promise<DrinkMenuItem>;
+  }
 
   // ==================== MENU MANAGEMENT ====================
 
