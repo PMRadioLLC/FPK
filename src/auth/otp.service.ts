@@ -34,7 +34,16 @@ export class OtpService {
    * Generate and send a 6-digit OTP to an email address
    */
   async sendOTP(email: string): Promise<{ message: string }> {
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = (email || '').toLowerCase().trim();
+
+    // Basic email-shape validation BEFORE inserting OTP records or calling Mailgun.
+    // Defends against typos like "name.gmail.com" (missing @) — Mailgun rejects
+    // these silently and our user gets a confusing "Failed to send" error.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      throw new BadRequestException(
+        "That email doesn't look right. Did you forget the @ or .com?",
+      );
+    }
 
     // Check if email is currently blocked
     const blocked = await this.isBlocked(normalizedEmail);
