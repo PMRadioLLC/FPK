@@ -24,6 +24,18 @@ export class LocationsController {
     return this.locationsService.getAllLocations();
   }
 
+  /**
+   * GET /locations/my/assignments — Staff: get my assigned locations
+   *
+   * IMPORTANT: this MUST be declared before `@Get(':id')` so the literal
+   * `my/assignments` route matches before being treated as a UUID param.
+   */
+  @Get('my/assignments')
+  @Auth()
+  getMyLocations(@CurrentUser() user: User) {
+    return this.locationsService.getStaffLocations(user.id);
+  }
+
   /** GET /locations/:id — Single location details */
   @Get(':id')
   @Auth()
@@ -74,12 +86,5 @@ export class LocationsController {
   @AuthRoles(UserRole.OWNER, UserRole.MANAGER)
   removeStaff(@Param('assignmentId', ParseUUIDPipe) assignmentId: string) {
     return this.locationsService.removeStaffAssignment(assignmentId);
-  }
-
-  /** GET /locations/my/assignments — Staff: get my assigned locations */
-  @Get('my/assignments')
-  @Auth()
-  getMyLocations(@CurrentUser() user: User) {
-    return this.locationsService.getStaffLocations(user.id);
   }
 }

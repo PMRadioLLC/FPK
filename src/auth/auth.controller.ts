@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { FirebaseLoginDto, RegisterDto, AuthResponseDto } from './auth.dto';
 
@@ -22,6 +23,7 @@ export class AuthController {
    */
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   async login(@Body() dto: FirebaseLoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto.firebaseIdToken);
   }
@@ -38,6 +40,7 @@ export class AuthController {
    * - Returns JWT + user profile
    */
   @Post('register')
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   async register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
     return this.authService.register(dto);
   }

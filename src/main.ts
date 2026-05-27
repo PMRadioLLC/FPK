@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -18,6 +19,16 @@ async function bootstrap() {
   // Raise body size limit to 15MB while preserving rawBody for Stripe webhooks.
   app.useBodyParser('json', { limit: '15mb' });
   app.useBodyParser('urlencoded', { limit: '15mb', extended: true });
+
+  // Security headers — Helmet sets X-Frame-Options, X-Content-Type-Options,
+  // Strict-Transport-Security, and more. crossOriginResourcePolicy is relaxed
+  // to 'cross-origin' so the mobile app can fetch image URLs from Firebase Storage.
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: false, // we're an API, not serving HTML
+    }),
+  );
 
   // Global prefix — all routes start with /api
   app.setGlobalPrefix('api');

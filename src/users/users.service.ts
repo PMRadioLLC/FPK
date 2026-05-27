@@ -8,6 +8,7 @@ import { BarcodeSecret } from '../barcode/barcode-secret.entity';
 import { Membership, MembershipStatus } from '../memberships/membership.entity';
 import { DrinkRequest } from '../drink-requests/drink-request.entity';
 import { IdVerification, VerificationStatus } from '../verification/id-verification.entity';
+import { decodeImageBase64 } from '../common/image-validator';
 import { FirebaseService } from '../auth/firebase.service';
 
 @Injectable()
@@ -49,11 +50,8 @@ export class UsersService {
    * to Firebase Storage avoids the RN + Firebase-JS-SDK Blob compatibility issue.
    */
   async updateSelfieFromBase64(userId: string, base64: string): Promise<User> {
-    if (!base64 || base64.length < 20) {
-      throw new BadRequestException('Missing or invalid selfie photo');
-    }
-    const clean = base64.replace(/^data:image\/\w+;base64,/, '');
-    const bytes = Buffer.from(clean, 'base64');
+    // Validates magic bytes + size (5 MB max for selfies).
+    const bytes = decodeImageBase64(base64, { maxBytes: 5 * 1024 * 1024, label: 'selfie' });
     const path = `selfies/${userId}_${Date.now()}.jpg`;
     const url = await this.firebaseService.uploadFile(path, bytes, 'image/jpeg');
 
@@ -211,13 +209,9 @@ export class UsersService {
   ): Promise<User> {
     const target = await this.userRepo.findOne({ where: { id: targetUserId } });
     if (!target) throw new NotFoundException('User not found');
-    if (!idPhotoBase64 || idPhotoBase64.length < 20) {
-      throw new BadRequestException('Missing or invalid ID photo');
-    }
 
-    // Strip any data:image/jpeg;base64, prefix if present
-    const cleanBase64 = idPhotoBase64.replace(/^data:image\/\w+;base64,/, '');
-    const bytes = Buffer.from(cleanBase64, 'base64');
+    // Validates magic bytes + size (5 MB max for ID photos).
+    const bytes = decodeImageBase64(idPhotoBase64, { maxBytes: 5 * 1024 * 1024, label: 'ID photo' });
 
     // Upload to Firebase Storage server-side
     const path = `id-verifications/${targetUserId}_${Date.now()}.jpg`;

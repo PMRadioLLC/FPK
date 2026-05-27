@@ -1,11 +1,21 @@
 import { Injectable, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
+import * as crypto from 'crypto';
 import { EmailService } from './email.service';
 
 // We'll store OTPs in a simple database table
 // This is more reliable than Redis for this use case
 import { OtpRecord } from './otp-record.entity';
+
+/**
+ * Anonymize an email for logging. Returns an 8-char SHA-256 prefix so the
+ * same user can be correlated across log lines without leaking the address.
+ * Defends against log-leak → user enumeration.
+ */
+function hashEmail(email: string): string {
+  return 'u:' + crypto.createHash('sha256').update(email).digest('hex').slice(0, 8);
+}
 
 @Injectable()
 export class OtpService {
@@ -63,7 +73,7 @@ export class OtpService {
       throw new BadRequestException('Failed to send verification email. Please try again.');
     }
 
-    this.logger.log('OTP generated for ' + normalizedEmail);
+    this.logger.log('OTP generated for ' + hashEmail(normalizedEmail));
     return { message: 'Verification code sent to ' + normalizedEmail };
   }
 
@@ -113,7 +123,7 @@ export class OtpService {
         record.blockedUntil.setMinutes(record.blockedUntil.getMinutes() + this.BLOCK_DURATION_MINUTES);
         await this.otpRepo.save(record);
         
-        this.logger.warn('Email blocked due to too many wrong OTP attempts: ' + normalizedEmail);
+        this.logger.warn('Email blocked due to too many wrong OTP attempts: ' + hashEmail(normalizedEmail));
         throw new ForbiddenException(
           'Too many wrong attempts. This email is blocked for 10 minutes.',
         );
@@ -131,7 +141,7 @@ export class OtpService {
     record.verifiedAt = new Date();
     await this.otpRepo.save(record);
 
-    this.logger.log('OTP verified for ' + normalizedEmail);
+    this.logger.log('OTP verified for ' + hashEmail(normalizedEmail));
     return { verified: true };
   }
 

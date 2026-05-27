@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { VerificationModule } from './verification/verification.module';
@@ -46,6 +48,14 @@ import { AdminModule } from './admin/admin.module';
       }),
     }),
 
+    // ===== RATE LIMITING =====
+    // Global throttler. Defaults: 100 requests / 60 seconds per IP.
+    // Tighter limits on auth/payment endpoints use @Throttle() locally.
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 100 },
+      { name: 'strict', ttl: 60_000, limit: 5 },     // login, OTP send, payment create
+    ]),
+
     // ===== FEATURE MODULES =====
     AuthModule,             // Firebase auth + JWT + guards
     UsersModule,            // User profiles + admin user management
@@ -58,6 +68,11 @@ import { AdminModule } from './admin/admin.module';
     NotificationsModule,    // Expo push token registration + delivery
     DrinkRequestsModule,    // Member drink requests + staff acceptance
     AdminModule,            // Admin dashboard stats
+  ],
+  providers: [
+    // Apply ThrottlerGuard globally — every endpoint inherits the default limit
+    // unless it overrides via @Throttle() or @SkipThrottle().
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

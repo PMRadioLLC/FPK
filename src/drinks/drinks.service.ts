@@ -6,6 +6,7 @@ import { LocationDrink } from './location-drink.entity';
 import { DrinkLog } from './drink-log.entity';
 import { DrinkLimitConfig } from './drink-limit-config.entity';
 import { FirebaseService } from '../auth/firebase.service';
+import { decodeImageBase64 } from '../common/image-validator';
 
 @Injectable()
 export class DrinksService {
@@ -22,14 +23,11 @@ export class DrinksService {
    * to avoid RN + Firebase-JS-SDK Blob compatibility issues.
    */
   async uploadPhotoFromBase64(id: string, base64: string): Promise<DrinkMenuItem> {
-    if (!base64 || base64.length < 20) {
-      throw new BadRequestException('Missing or invalid photo');
-    }
     const item = await this.menuRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Menu item not found');
 
-    const clean = base64.replace(/^data:image\/\w+;base64,/, '');
-    const bytes = Buffer.from(clean, 'base64');
+    // Validates magic bytes + size (2 MB max for drink photos).
+    const bytes = decodeImageBase64(base64, { maxBytes: 2 * 1024 * 1024, label: 'drink photo' });
     const path = `drinks/${id}_${Date.now()}.jpg`;
     const photoUrl = await this.firebaseService.uploadFile(path, bytes, 'image/jpeg');
 
@@ -170,14 +168,21 @@ export class DrinksService {
       isUnlimited?: boolean;
     },
   ): Promise<DrinkLimitConfig> {
+    // Explicit whitelist — never blindly merge user input into the entity.
+    // Defends against mass-assignment attacks if the controller's DTO ever drifts.
+    const safe: Partial<DrinkLimitConfig> = {};
+    if (typeof data.maxDrinksPerDay === 'number') safe.maxDrinksPerDay = data.maxDrinksPerDay;
+    if (typeof data.cooldownMinutes === 'number') safe.cooldownMinutes = data.cooldownMinutes;
+    if (typeof data.isUnlimited === 'boolean') safe.isUnlimited = data.isUnlimited;
+
     let config = await this.limitRepo.findOne({ where: { locationId } });
-
     if (config) {
-      Object.assign(config, data);
+      if (safe.maxDrinksPerDay !== undefined) config.maxDrinksPerDay = safe.maxDrinksPerDay;
+      if (safe.cooldownMinutes !== undefined) config.cooldownMinutes = safe.cooldownMinutes;
+      if (safe.isUnlimited !== undefined) config.isUnlimited = safe.isUnlimited;
     } else {
-      config = this.limitRepo.create({ locationId, ...data });
+      config = this.limitRepo.create({ locationId, ...safe });
     }
-
     return this.limitRepo.save(config);
   }
 }

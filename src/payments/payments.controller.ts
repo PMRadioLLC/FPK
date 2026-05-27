@@ -10,6 +10,7 @@ import {
   RawBodyRequest,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { PaymentsService } from './payments.service';
 import { Auth, AuthRoles, CurrentUser } from '../auth/auth.guards';
@@ -22,10 +23,12 @@ export class PaymentsController {
 
   /**
    * POST /payments/card — Create a Stripe PaymentIntent
-   * Returns clientSecret for the mobile app to complete payment
+   * Returns clientSecret for the mobile app to complete payment.
+   * Rate-limited tighter than default to slow down card-testing attacks.
    */
   @Post('card')
   @Auth()
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   createCardPayment(
     @CurrentUser() user: User,
     @Body() body: { plan: MembershipPlan; promoCode?: string },
@@ -83,8 +86,10 @@ export class PaymentsController {
   /**
    * POST /payments/webhook — Stripe webhook (no auth — verified by signature)
    * IMPORTANT: This endpoint needs raw body access for signature verification.
+   * @SkipThrottle: Stripe may burst many events; signature check is the real gate.
    */
   @Post('webhook')
+  @SkipThrottle()
   async handleWebhook(
     @Req() req: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature: string,
