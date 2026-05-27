@@ -125,7 +125,7 @@ export class DrinksService {
   ): Promise<{ logs: DrinkLog[]; total: number }> {
     const [logs, total] = await this.drinkLogRepo.findAndCount({
       where: { userId },
-      relations: ['location'],
+      relations: ['location', 'staff'],
       order: { scannedAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
