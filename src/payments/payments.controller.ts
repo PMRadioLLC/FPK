@@ -84,6 +84,20 @@ export class PaymentsController {
   }
 
   /**
+   * POST /payments/:id/sync — Pull payment status from Stripe.
+   * Backup mechanism for when webhooks are slow or fail to fire.
+   * Idempotent: calling after the webhook has already settled is a no-op.
+   */
+  @Post(':id/sync')
+  @Auth()
+  syncPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.paymentsService.syncPaymentFromStripe(id, user.id);
+  }
+
+  /**
    * POST /payments/webhook — Stripe webhook (no auth — verified by signature)
    * IMPORTANT: This endpoint needs raw body access for signature verification.
    * @SkipThrottle: Stripe may burst many events; signature check is the real gate.

@@ -224,13 +224,61 @@ export class PaymentsService {
     return this.promoRepo.find({ order: { createdAt: 'DESC' } });
   }
 
+  /**
+   * Sync a payment's status from Stripe. Used as a backup when the webhook
+   * fails to fire (network blip, misconfigured endpoint, etc).
+   *
+   * - Fetches the PaymentIntent from Stripe.
+   * - If 'succeeded' and we haven't already → creates membership, marks complete.
+   * - If 'requires_payment_method' / 'canceled' → marks payment as failed.
+   * - Idempotent: calling repeatedly after success is safe.
+   *
+   * Returns the (possibly updated) payment row plus an `activated` flag so the
+   * client knows whether to refresh.
+   */
+  async syncPaymentFromStripe(
+    paymentId: string,
+    userId: string,
+  ): Promise<{ payment: Payment; activated: boolean }> {
+    const payment = await this.paymentRepo.findOne({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.userId !== userId) {
+      throw new BadRequestException('Not your payment');
+    }
+    if (payment.method !== PaymentMethod.CARD || !payment.stripePaymentId) {
+      // Cash payments are reconciled by staff, not Stripe.
+      return { payment, activated: false };
+    }
+
+    // Already settled — nothing to do.
+    if (payment.status === PaymentStatus.COMPLETED) {
+      return { payment, activated: false };
+    }
+
+    const intent = await this.stripe.paymentIntents.retrieve(payment.stripePaymentId);
+
+    if (intent.status === 'succeeded') {
+      await this.confirmCardPayment(intent);
+      const refreshed = await this.paymentRepo.findOne({ where: { id: payment.id } });
+      return { payment: refreshed!, activated: true };
+    }
+
+    if (intent.status === 'canceled' || intent.status === 'requires_payment_method') {
+      payment.status = PaymentStatus.FAILED;
+      await this.paymentRepo.save(payment);
+      return { payment, activated: false };
+    }
+
+    // Still processing — leave pending, frontend will poll again.
+    return { payment, activated: false };
+  }
+
   // ==========================================
   // HELPERS
   // ==========================================
   private async confirmCardPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
     const { userId, plan, promoCodeId } = paymentIntent.metadata;
 
-    // Find our payment record
     const payment = await this.paymentRepo.findOne({
       where: { stripePaymentId: paymentIntent.id },
     });
@@ -239,7 +287,13 @@ export class PaymentsService {
       return;
     }
 
-    // Create the membership
+    // Idempotency guard — if this PI was already confirmed (webhook fired before
+    // sync, or vice versa) skip the duplicate membership creation.
+    if (payment.status === PaymentStatus.COMPLETED && payment.membershipId) {
+      this.logger.log(`Card payment already settled: ${paymentIntent.id}`);
+      return;
+    }
+
     const membership = await this.membershipsService.createMembership(
       userId,
       plan as MembershipPlan,
@@ -247,7 +301,6 @@ export class PaymentsService {
       paymentIntent.id,
     );
 
-    // Update payment
     payment.status = PaymentStatus.COMPLETED;
     payment.membershipId = membership.id;
     await this.paymentRepo.save(payment);
