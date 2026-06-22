@@ -60,6 +60,15 @@ export class User {
   @Column({ name: 'id_photo_url', type: 'varchar', nullable: true })
   idPhotoUrl: string | null;
 
+  /**
+   * Bumped to invalidate all outstanding JWTs for this user. Every issued
+   * JWT carries the value of token_version at issue time; the JwtStrategy
+   * compares it against the current value and rejects if mismatched.
+   * Bumped on: ban, role change, password change, logout-from-all.
+   */
+  @Column({ name: 'token_version', type: 'int', default: 0 })
+  tokenVersion: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

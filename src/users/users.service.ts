@@ -60,7 +60,15 @@ export class UsersService {
   }
 
   async banUser(userId: string): Promise<User> {
-    await this.userRepo.update(userId, { status: UserStatus.BANNED });
+    // Bump token_version so any active sessions are immediately invalidated.
+    // Without this a banned user could keep using the app until their 7-day
+    // JWT naturally expired.
+    await this.userRepo
+      .createQueryBuilder()
+      .update(User)
+      .set({ status: UserStatus.BANNED, tokenVersion: () => 'token_version + 1' })
+      .where('id = :id', { id: userId })
+      .execute();
     return this.findById(userId);
   }
 

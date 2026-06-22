@@ -36,6 +36,12 @@ export class OtpService {
   async sendOTP(email: string): Promise<{ message: string }> {
     const normalizedEmail = (email || '').toLowerCase().trim();
 
+    // RFC 5321 caps the full address at 254 chars — anything longer is either
+    // a typo or a DoS attempt.
+    if (normalizedEmail.length > 254) {
+      throw new BadRequestException('Email address is too long.');
+    }
+
     // Basic email-shape validation BEFORE inserting OTP records or calling Mailgun.
     // Defends against typos like "name.gmail.com" (missing @) — Mailgun rejects
     // these silently and our user gets a confusing "Failed to send" error.

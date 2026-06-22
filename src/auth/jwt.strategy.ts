@@ -11,6 +11,13 @@ export interface JwtPayload {
   email: string;
   role: string;
   status: string;
+  /**
+   * Snapshot of users.token_version at issue time. The strategy compares it
+   * against the current value on every request; mismatch = revoked.
+   * Optional so legacy tokens (issued before revocation existed) still pass
+   * — they're treated as version 0 and stay valid until natural expiry.
+   */
+  tv?: number;
 }
 
 @Injectable()
@@ -38,6 +45,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     if (user.status === 'banned') {
       throw new UnauthorizedException('Account has been banned');
+    }
+    // Token revocation — if the user's tokenVersion has been bumped since
+    // this JWT was issued, reject. Tokens without `tv` are pre-revocation
+    // legacy tokens and pass (they expire naturally after 7 days).
+    if (payload.tv !== undefined && payload.tv !== user.tokenVersion) {
+      throw new UnauthorizedException('Session expired — please sign in again');
     }
     return user;
   }

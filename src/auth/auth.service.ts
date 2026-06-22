@@ -169,12 +169,14 @@ export class AuthService {
       },
     });
 
-    // Generate JWT
+    // Generate JWT — embed tokenVersion so we can revoke this token later
+    // (on ban, role change, etc.) by bumping users.token_version.
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
       status: user.status,
+      tv: user.tokenVersion ?? 0,
     };
     const accessToken = this.jwtService.sign(payload);
 
