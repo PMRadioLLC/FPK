@@ -308,6 +308,42 @@ export class PaymentsService {
     this.logger.log(`Card payment confirmed: ${paymentIntent.id} → membership ${membership.id}`);
   }
 
+  async getMyPayments(userId: string): Promise<{
+    thisMonth: number;
+    thisYear: number;
+    payments: { id: string; amount: number; method: string; status: string; createdAt: Date }[];
+  }> {
+    const all = await this.paymentRepo.find({
+      where: { userId, status: PaymentStatus.COMPLETED },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+
+    const now = new Date();
+    const thisMonth = all
+      .filter(p => {
+        const d = new Date(p.createdAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      })
+      .reduce((s, p) => s + p.amount, 0);
+
+    const thisYear = all
+      .filter(p => new Date(p.createdAt).getFullYear() === now.getFullYear())
+      .reduce((s, p) => s + p.amount, 0);
+
+    return {
+      thisMonth,
+      thisYear,
+      payments: all.map(p => ({
+        id: p.id,
+        amount: p.amount,
+        method: p.method,
+        status: p.status,
+        createdAt: p.createdAt,
+      })),
+    };
+  }
+
   private async failPayment(stripePaymentId: string): Promise<void> {
     const payment = await this.paymentRepo.findOne({
       where: { stripePaymentId },

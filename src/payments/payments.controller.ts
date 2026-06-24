@@ -116,6 +116,13 @@ export class PaymentsController {
     return { received: true };
   }
 
+  /** GET /payments/my — Member: own payment history */
+  @Get('my')
+  @Auth()
+  getMyPayments(@CurrentUser() user: User) {
+    return this.paymentsService.getMyPayments(user.id);
+  }
+
   // ==================== PROMO CODES ====================
 
   /** GET /payments/promo-codes — Admin: list all promo codes */
